@@ -5,6 +5,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import QuotesPage  from "./pages/QuotesPage";
 import ManagePage  from "./pages/ManagePage";
+import PasswordGate  from "./components/PasswordGate";
 
 export default function App() {
   return (
@@ -16,7 +17,12 @@ export default function App() {
         <Route path="/"       element={<QuotesPage />} />
 
         {/* Ruta de administrare – operațiuni CRUD complete */}
-        <Route path="/manage" element={<ManagePage />} />
+        <Route path="/manage" element={
+          <PasswordGate>
+          <ManagePage />
+        </PasswordGate>
+      }
+       />
       </Routes>
     </BrowserRouter>
   );

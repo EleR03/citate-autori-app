@@ -1,71 +1,183 @@
 const express = require("express");
-const cors= require("cors");
-const Joi = require("joi");
-const fs = require("fs"); // modul pentru operații cu fişiere
-const path = require("path"); // modul pentru construirea căilor
+const cors    = require("cors");
+const Joi     = require("joi");
+const fs      = require("fs");   // modul pentru operații cu fișiere
+const path    = require("path"); // modul pentru construirea căilor
 
-const app = express(); // creează instanţa aplicației Express
-app.use(cors()); // activează CORS - orice client poate face cereri
-app.use(express.json()); //middleware care parsează automat corpul
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-const JSON_SERVER_URL= "http://localhost:3000/quotes";
+// ─────────────────────────────────────────────────────────────────────────────
+// Directorul unde salvăm imaginile descărcate.
+// path.join asigură compatibilitate cross-platform.
+const IMAGES_DIR = path.join(__dirname, "images");
 
-// verificam daca id-ul din PUT si DELETE este un numar valid
+// Creăm directorul /images dacă nu există deja
+// { recursive: true } previne eroarea dacă directorul există
+if (!fs.existsSync(IMAGES_DIR)) {
+  fs.mkdirSync(IMAGES_DIR, { recursive: true });
+}
+
+// Servim fișierele statice din /images pe ruta /images/*
+app.use("/images", express.static(IMAGES_DIR));
+// ─────────────────────────────────────────────────────────────────────────────
+
+const JSON_SERVER_URL = "http://localhost:3000/quotes";
+
 const validateId = (req, res, next) => {
   if (isNaN(req.params.id)) {
-    return res.status(400).json({ error: "Invalid ID format" });
+    return res.status(400).json({ error: "invalid id format" });
   }
   next();
 };
 
-// Schema Joi pentru validarea citatelor
+// ✅ imageUrl este opțional — poate fi string gol sau un path valid
 const quoteSchema = Joi.object({
-  author: Joi.string().min(2).required(),
-  quote: Joi.string().min(5).required(),
+  author:   Joi.string().min(2).required(),
+  quote:    Joi.string().min(5).required(),
+  imageUrl: Joi.string().allow("").optional(),
 });
 
-// API route placeholder
 app.get("/", (req, res) => {
-  res.send("Printing Quotes API is running...");
+  res.send("printing quotes API is running---");
 });
+
 // Extragem citatele
 app.get("/api/quotes", async (req, res) => {
-try {
-const response = await fetch(JSON_SERVER_URL);
-const data  = await response.json();
-res.json(data);
-} catch (error) {
-console.error("Eroare la preluarea citatelor:", error);
-res.status(500).json({ error: "Nu s-au putut prelua citatele" });
-}
+  try {
+    const response = await fetch(JSON_SERVER_URL);
+    const data     = await response.json();
+
+    const { search } = req.query; // req.query conține parametrii din URL (?search=...)
+
+    if (search && search.trim()) {
+      const term = search.trim().toLowerCase();
+
+      // Filtrăm array-ul - includem citatul dacă termenul apare
+      // în numele autorului SAU în textul citatului
+      const filtered = data.filter(q =>
+        q.author.toLowerCase().includes(term) ||
+        q.quote.toLowerCase().includes(term)
+      );
+
+      return res.status(200).json(filtered);
+    }
+
+    // Fără parametru search → returnăm toate citatele
+    res.status(200).json(data);
+  } catch (error) {
+    console.error("Eroare la preluarea citatelor:", error.message);
+    res.status(500).json({ error: "Nu s-au putut prelua citatele." });
+  }
 });
 
-//Adauga un nou citat
-app.post("/api/quotes", async (req, res) => {
-  const { error } = quoteSchema.validate(req.body);
-  if (error) {
-    return res.status(400).json({ error: error.details[0].message });
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/quotes/fetch-image
+// Primește { author } din body, caută pe Wikipedia,
+// descarcă imaginea și o salvează în /images/.
+// Returnează URL-ul local al imaginii.
+//
+// ⚠️  Această rută trebuie definită ÎNAINTE de
+// rutele cu parametru (:id) — altfel Express ar interpreta
+// "fetch-image" ca un ID.
+// ─────────────────────────────────────────────────────────────────────────────
+app.post("/api/quotes/fetch-image", async (req, res) => {
+  const { author } = req.body;
+
+  if (!author || !author.trim()) {
+    return res.status(400).json({ error: "Numele autorului este obligatoriu." });
   }
 
   try {
+    // Formatăm numele autorului pentru URL Wikipedia:
+    // "Albert Einstein" → "Albert_Einstein"
+    const wikiName = author.trim().replace(/\s+/g, "_");
+    const wikiUrl  = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiName)}`;
+
+    // Cerere către Wikipedia REST API
+    // User-Agent este recomandat de Wikipedia pentru identificarea aplicației
+    const wikiResponse = await fetch(wikiUrl, {
+      headers: {
+        "User-Agent": "PrintingQuotesApp/1.0",
+      },
+    });
+
+    if (!wikiResponse.ok) {
+      return res.status(404).json({
+        error: `Autorul "${author}" nu a fost găsit pe Wikipedia.`,
+      });
+    }
+
+    const wikiData = await wikiResponse.json();
+
+    // Verificăm dacă pagina Wikipedia are o imagine thumbnail
+    if (!wikiData.thumbnail?.source) {
+      return res.status(404).json({
+        error: `Nu există imagine disponibilă pentru "${author}" pe Wikipedia.`,
+      });
+    }
+
+    const imageUrl = wikiData.thumbnail.source;
+
+    // Determinăm extensia fișierului din URL (jpg, png, jpeg etc.)
+    const ext = imageUrl.split(".").pop().split("?")[0].toLowerCase();
+
+    // Numele fișierului local: "albert_einstein.jpg"
+    // toLowerCase + replace spații = nume de fișier valid
+    const fileName = `${author.trim().toLowerCase().replace(/\s+/g, "_")}.${ext}`;
+    const filePath = path.join(IMAGES_DIR, fileName);
+
+    // Dacă imaginea a fost descărcată anterior, o returnăm direct
+    // fără a face o nouă cerere la Wikipedia
+    if (fs.existsSync(filePath)) {
+      console.log(`Imagine existentă returnată: ${fileName}`);
+      return res.status(200).json({ imageUrl: `/images/${fileName}` });
+    }
+
+    // Descărcăm imaginea de la Wikipedia
+    const imgResponse = await fetch(imageUrl);
+    if (!imgResponse.ok) {
+      return res.status(500).json({ error: "Nu s-a putut descărca imaginea." });
+    }
+
+    // Convertim răspunsul într-un Buffer (date binare)
+    const buffer = Buffer.from(await imgResponse.arrayBuffer());
+
+    // Scriem fișierul pe disc în directorul /images
+    fs.writeFileSync(filePath, buffer);
+    console.log(`Imagine salvată: ${fileName}`);
+
+    // Returnăm URL-ul local — Express servește /images/* ca static
+    res.status(200).json({ imageUrl: `/images/${fileName}` });
+
+  } catch (error) {
+    console.error("Eroare la fetch-image:", error.message);
+    res.status(500).json({ error: "Eroare internă la preluarea imaginii." });
+  }
+});
+
+// Adaugă un nou citat
+app.post("/api/quotes", async (req, res) => {
+  const { error } = quoteSchema.validate(req.body);
+  if (error) { return res.status(400).json({ error: error.details[0].message }); }
+
+  try {
     const response = await fetch(JSON_SERVER_URL);
-    const quotes = await response.json();
+    const quotes   = await response.json();
 
     // generam un ID numeric (urmatorul numar disponibil)
-    const numericIds = quotes.map(q => Number(q.id)).filter(id => !isNaN(id));
-    const newId = numericIds.length > 0 ? Math.max(...numericIds) + 1 : 1;
-
+    const newId    = quotes.length > 0 ? Math.max(...quotes.map(q => Number(q.id))) + 1 : 1;
     const newQuote = { id: newId.toString(), ...req.body };
 
-    // trimite la json-server
     const postResponse = await fetch(JSON_SERVER_URL, {
-      method: "POST",
+      method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newQuote),
+      body:    JSON.stringify(newQuote),
     });
 
     const data = await postResponse.json();
-    res.status(201).json(data);
+    res.status(postResponse.status).json(data);
   } catch (error) {
     console.error("Error adding quote:", error);
     res.status(500).json({ error: "Failed to add quote" });
@@ -73,28 +185,23 @@ app.post("/api/quotes", async (req, res) => {
 });
 
 // Actualizam un citat
-// Actualizam un citat
 app.put("/api/quotes/:id", validateId, async (req, res) => {
   const { error } = quoteSchema.validate(req.body);
-  if (error) {
-    return res.status(400).json({ error: error.details[0].message });
-  }
+  if (error) { return res.status(400).json({ error: error.details[0].message }); }
 
   try {
-    const quoteId = req.params.id;
+    const quoteId      = req.params.id;
     const updatedQuote = { id: quoteId, ...req.body };
 
     const response = await fetch(`${JSON_SERVER_URL}/${quoteId}`, {
-      method: "PUT",
+      method:  "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updatedQuote),
+      body:    JSON.stringify(updatedQuote),
     });
 
-    if (!response.ok) {
-      return res.status(404).json({ error: "Quote not found" });
-    }
+    if (!response.ok) { return res.status(404).json({ error: "quote not found" }); }
 
-    const data = await response.json();
+    const data          = await response.json();
     const reorderedData = { id: data.id, author: data.author, quote: data.quote };
     res.status(response.status).json(reorderedData);
   } catch (error) {
@@ -107,10 +214,10 @@ app.put("/api/quotes/:id", validateId, async (req, res) => {
 app.delete("/api/quotes/:id", validateId, async (req, res) => {
   try {
     const quoteId = req.params.id;
-    const checkResponse = await fetch(`${JSON_SERVER_URL}/${quoteId}`);
 
+    const checkResponse = await fetch(`${JSON_SERVER_URL}/${quoteId}`);
     if (!checkResponse.ok) {
-      return res.status(404).json({ error: "Quote not found" });
+      return res.status(404).json({ error: "quote not found" });
     }
 
     await fetch(`${JSON_SERVER_URL}/${quoteId}`, { method: "DELETE" });
@@ -121,73 +228,8 @@ app.delete("/api/quotes/:id", validateId, async (req, res) => {
   }
 });
 
-// Pornim serverul
-const port = 5000;
-app.listen(port, () => console.log(`Server running on http://localhost:${port}`));
-
-// Verificam repornirea automata a serverului
-console.log("Server restarted!");
-
-
-
-
-
-
-// let quotes= [{id:1, author: "Socrates", qoute:"The only true wisdom..."},
-//  {id:2, author: "Albert Einstein", qoute:"The only true wisdom..."}   
-// ]
-// app.get("/api/quotes", (req, res)=>{
-//     res.status(200).json(quotes);
-// });
-
-// app.post("/api/quotes", (req, res) =>{
-// const {author, quote}= req.body;
-// const newQuote ={
-// id: quotes.length + 1, // Generäm un ID unic
-// author,
-// quote};
-// quotes.push(newQuote);
-// res.status(201).json(newQuote);
-// });
-
-// app.put("/api/quotes/:id", (req, res)=> {
-// const id= parseInt(req.params.id);
-// const { author, quote}= req.body;
-// const index =quotes.findIndex(q=> q.id ==id);
-// if (index== -1) {
-// // 404 Not Found citatul cu 10-ul respectiv nu există
-// return res.status(404).json({message: "Citatul nu a fost găsit."});
-// }
-// // Actualizăn intrarea păstrand ID-ul neschimbat
-// quotes [index] ={id, author, quote};
-// res.status(200).json(quotes [index]);});
-
-// app.delete("/api/quotes/:id", (req, res)=> {
-// const id= parseInt(req.params.id);
-// const index =quotes.findIndex(q=> q.id == id);
-// if (index == -1) {
-// return res.status(404).json({message: "Citatul nu a fost găsit." });
-// }
-// quotes.splice(index, 1);
-// res.status(200).json({ message: "Citatul a fost şters cu succes." });
-// });
-
-
-// app.get("/", (req, res)=> {
-// res.json({
-// message: "Citate Autori API functioneaza...",
-// endpoints: {
-// quotes: "/api/quotes",
-// health: "/api/health"
-// }
-// });
-// });
-
-
-
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Serverul ruleaza la http://localhost:${PORT}`);
+  console.log(`Serverul rulează la http://localhost:${PORT}`);
 });
-
 console.log("Server restarted");

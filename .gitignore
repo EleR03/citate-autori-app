@@ -17,3 +17,9 @@ build/
 # Fişiere log
 *. log
 npm-debug.log
+
+
+images/*.jpg
+images/*.png
+images/*.jpeg
+images/*.webp

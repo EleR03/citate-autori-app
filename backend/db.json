@@ -3,12 +3,56 @@
     {
       "id": "1",
       "author": "Socrates",
-      "quote": "The only true wisdom is in knowing you know nothing."
+      "quote": "The only true wisdom is in knowing you know nothing.",
+      "imageUrl": "/images/socrates.jpg"
     },
     {
       "id": "2",
       "author": "Einstein",
-      "quote": "Imagination is more important than knowledge."
+      "quote": "Imagination is more important than knowledge.",
+      "imageUrl": "/images/einstein.jpg"
+    },
+    {
+      "id": "3",
+      "author": "Marcus Aurelius",
+      "quote": "You have power over your mind, not outside events. Realize this and you will find strength.",
+      "imageUrl": "/images/marcus_aurelius.jpg"
+    },
+    {
+      "id": "4",
+      "author": "Winston Churchill",
+      "quote": "Success is not final, failure is not fatal: it is the courage to continue that counts.",
+      "imageUrl": "/images/winston_churchill.jpg"
+    },
+    {
+      "id": "5",
+      "author": "Albert Einstein",
+      "quote": "Imagination is more important than knowledge.",
+      "imageUrl": "/images/albert_einstein.jpg"
+    },
+    {
+      "id": "6",
+      "author": "Maya Angelou",
+      "quote": "You will face many defeats in life, but never let yourself be defeated.",
+      "imageUrl": "/images/maya_angelou.jpg"
+    },
+    {
+      "id": "7",
+      "author": "Nelson Mandela",
+      "quote": "It always seems impossible until it is done.",
+      "imageUrl": "/images/nelson_mandela.jpg"
+    },
+    {
+      "id": "8",
+      "author": "Lao Tzu",
+      "quote": "“The journey of a thousand miles begins with a single step.”",
+      "imageUrl": "/images/lao_tzu.png"
+    },
+    {
+      "id": "9",
+      "author": "Sun Tzu",
+      "quote": "\"The supreme art of war is to subdue the enemy without fighting.\"",
+      "imageUrl": "/images/sun_tzu.jpg"
     }
   ],
   "$schema": "./node_modules/json-server/schema.json"
