@@ -1,25 +1,30 @@
+// Încarcă variabilele din .env în process.env
+require("dotenv").config();
+
 const express = require("express");
 const cors    = require("cors");
 const Joi     = require("joi");
-const fs      = require("fs");   // modul pentru operații cu fișiere
-const path    = require("path"); // modul pentru construirea căilor
+const fs      = require("fs");
+const path    = require("path");
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
+const OpenAI = require("openai");
+const openai = new OpenAI({
+  baseURL: "https://models.inference.ai.azure.com",
+  apiKey: process.env.GITHUB_TOKEN,
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Directorul unde salvăm imaginile descărcate.
-// path.join asigură compatibilitate cross-platform.
 const IMAGES_DIR = path.join(__dirname, "images");
 
-// Creăm directorul /images dacă nu există deja
-// { recursive: true } previne eroarea dacă directorul există
 if (!fs.existsSync(IMAGES_DIR)) {
   fs.mkdirSync(IMAGES_DIR, { recursive: true });
 }
 
-// Servim fișierele statice din /images pe ruta /images/*
 app.use("/images", express.static(IMAGES_DIR));
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -32,7 +37,6 @@ const validateId = (req, res, next) => {
   next();
 };
 
-// ✅ imageUrl este opțional — poate fi string gol sau un path valid
 const quoteSchema = Joi.object({
   author:   Joi.string().min(2).required(),
   quote:    Joi.string().min(5).required(),
@@ -49,13 +53,11 @@ app.get("/api/quotes", async (req, res) => {
     const response = await fetch(JSON_SERVER_URL);
     const data     = await response.json();
 
-    const { search } = req.query; // req.query conține parametrii din URL (?search=...)
+    const { search } = req.query;
 
     if (search && search.trim()) {
       const term = search.trim().toLowerCase();
 
-      // Filtrăm array-ul - includem citatul dacă termenul apare
-      // în numele autorului SAU în textul citatului
       const filtered = data.filter(q =>
         q.author.toLowerCase().includes(term) ||
         q.quote.toLowerCase().includes(term)
@@ -64,7 +66,6 @@ app.get("/api/quotes", async (req, res) => {
       return res.status(200).json(filtered);
     }
 
-    // Fără parametru search → returnăm toate citatele
     res.status(200).json(data);
   } catch (error) {
     console.error("Eroare la preluarea citatelor:", error.message);
@@ -74,13 +75,6 @@ app.get("/api/quotes", async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/quotes/fetch-image
-// Primește { author } din body, caută pe Wikipedia,
-// descarcă imaginea și o salvează în /images/.
-// Returnează URL-ul local al imaginii.
-//
-// ⚠️  Această rută trebuie definită ÎNAINTE de
-// rutele cu parametru (:id) — altfel Express ar interpreta
-// "fetch-image" ca un ID.
 // ─────────────────────────────────────────────────────────────────────────────
 app.post("/api/quotes/fetch-image", async (req, res) => {
   const { author } = req.body;
@@ -90,17 +84,11 @@ app.post("/api/quotes/fetch-image", async (req, res) => {
   }
 
   try {
-    // Formatăm numele autorului pentru URL Wikipedia:
-    // "Albert Einstein" → "Albert_Einstein"
     const wikiName = author.trim().replace(/\s+/g, "_");
     const wikiUrl  = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(wikiName)}`;
 
-    // Cerere către Wikipedia REST API
-    // User-Agent este recomandat de Wikipedia pentru identificarea aplicației
     const wikiResponse = await fetch(wikiUrl, {
-      headers: {
-        "User-Agent": "PrintingQuotesApp/1.0",
-      },
+      headers: { "User-Agent": "PrintingQuotesApp/1.0" },
     });
 
     if (!wikiResponse.ok) {
@@ -111,7 +99,6 @@ app.post("/api/quotes/fetch-image", async (req, res) => {
 
     const wikiData = await wikiResponse.json();
 
-    // Verificăm dacă pagina Wikipedia are o imagine thumbnail
     if (!wikiData.thumbnail?.source) {
       return res.status(404).json({
         error: `Nu există imagine disponibilă pentru "${author}" pe Wikipedia.`,
@@ -119,36 +106,22 @@ app.post("/api/quotes/fetch-image", async (req, res) => {
     }
 
     const imageUrl = wikiData.thumbnail.source;
-
-    // Determinăm extensia fișierului din URL (jpg, png, jpeg etc.)
-    const ext = imageUrl.split(".").pop().split("?")[0].toLowerCase();
-
-    // Numele fișierului local: "albert_einstein.jpg"
-    // toLowerCase + replace spații = nume de fișier valid
+    const ext      = imageUrl.split(".").pop().split("?")[0].toLowerCase();
     const fileName = `${author.trim().toLowerCase().replace(/\s+/g, "_")}.${ext}`;
     const filePath = path.join(IMAGES_DIR, fileName);
 
-    // Dacă imaginea a fost descărcată anterior, o returnăm direct
-    // fără a face o nouă cerere la Wikipedia
     if (fs.existsSync(filePath)) {
-      console.log(`Imagine existentă returnată: ${fileName}`);
       return res.status(200).json({ imageUrl: `/images/${fileName}` });
     }
 
-    // Descărcăm imaginea de la Wikipedia
     const imgResponse = await fetch(imageUrl);
     if (!imgResponse.ok) {
       return res.status(500).json({ error: "Nu s-a putut descărca imaginea." });
     }
 
-    // Convertim răspunsul într-un Buffer (date binare)
     const buffer = Buffer.from(await imgResponse.arrayBuffer());
-
-    // Scriem fișierul pe disc în directorul /images
     fs.writeFileSync(filePath, buffer);
-    console.log(`Imagine salvată: ${fileName}`);
 
-    // Returnăm URL-ul local — Express servește /images/* ca static
     res.status(200).json({ imageUrl: `/images/${fileName}` });
 
   } catch (error) {
@@ -156,6 +129,104 @@ app.post("/api/quotes/fetch-image", async (req, res) => {
     res.status(500).json({ error: "Eroare internă la preluarea imaginii." });
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/quotes/generate-quote
+// ─────────────────────────────────────────────────────────────────────────────
+app.post("/api/quotes/generate-quote", async (req, res) => {
+  const { author } = req.body;
+
+  if (!author || !author.trim()) {
+    return res.status(400).json({ error: "Numele autorului este obligatoriu." });
+  }
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `Ești un cunoscător în literatură și filosofie.
+Generezi citate scurte, inspiraționale și autentice.
+Răspunzi DOAR cu citatul, fără ghilimele, fără numele autorului,
+fără explicații suplimentare. Maxim 2 propoziții.`,
+        },
+        {
+          role: "user",
+          content: `Scrie un citat autentic specific lui ${author.trim()}.
+Dacă autorul are citate celebre cunoscute, folosește unul dintre ele.
+Dacă nu, generează unul în stilul și filosofia sa.`,
+        },
+      ],
+      max_tokens: 150,
+      temperature: 0.7,
+    });
+
+    const generatedQuote = completion.choices[0].message.content.trim();
+    res.status(200).json({ quote: generatedQuote });
+
+  } catch (error) {
+    console.error("Eroare OpenAI:", error.message);
+
+    if (error.status === 401) {
+      return res.status(500).json({ error: "Cheie API OpenAI invalidă." });
+    }
+
+    res.status(500).json({ error: "Nu s-a putut genera citatul." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/quotes/author-info
+// Primește { author } și returnează o descriere scurtă despre
+// autor, generată de AI. Răspunsul este deliberat scurt (2
+// propoziții) pentru a se încadra vizual într-un tooltip.
+//
+// Il vom defini înainte de /api/quotes/:id
+// ─────────────────────────────────────────────────────────────────────────────
+app.post("/api/quotes/author-info", async (req, res) => {
+  const { author } = req.body;
+
+  if (!author || !author.trim()) {
+    return res.status(400).json({ error: "Numele autorului este obligatoriu." });
+  }
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          // Sistemul definește formatul răspunsului
+          role: "system",
+          content: `Ești un asistent concis care descrie personalități istorice.
+                    Răspunzi doar în limba română.
+                    Răspunsul conține EXACT două propoziții scurte.
+                    Menționezi: domeniul, perioada și contribuția principală.
+                    Fără introduceri, fără "Sigur!", fără explicații extra.`,
+        },
+        {
+          role: "user",
+          content: `Descrie pe ${author.trim()} în exact 2 propoziții.`,
+        },
+      ],
+      // 120 tokens sunt suficienți pentru două propoziții scurte
+      max_tokens: 120,
+      // răspuns mai concis și factual
+      temperature: 0.5,
+    });
+
+    const info = completion.choices[0].message.content.trim();
+    res.status(200).json({ info });
+
+  } catch (error) {
+    console.error("Eroare author-info:", error.message);
+    res.status(500).json({ error: "Nu s-au putut prelua informațiile." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RUTE CU :id (trebuie să fie DUPĂ toate rutele cu nume fixe)
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Adaugă un nou citat
 app.post("/api/quotes", async (req, res) => {
@@ -166,7 +237,6 @@ app.post("/api/quotes", async (req, res) => {
     const response = await fetch(JSON_SERVER_URL);
     const quotes   = await response.json();
 
-    // generam un ID numeric (urmatorul numar disponibil)
     const newId    = quotes.length > 0 ? Math.max(...quotes.map(q => Number(q.id))) + 1 : 1;
     const newQuote = { id: newId.toString(), ...req.body };
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import QuoteCard from "../components/QuoteCard";
 import { getAllQuotes, addQuote, updateQuote, deleteQuote,
-         fetchAuthorImage } from "../api/quotesApi";
+         fetchAuthorImage, generateQuote} from "../api/quotesApi"; // IMPORT generateQuote
 import { useFormValidation } from "../hooks/useFormValidation"; // IMPORT hook validare
 
 // Regulile de validare sunt definite o singură dată, în afara componentei.
@@ -33,16 +33,60 @@ export default function ManagePage() {
   const [feedback, setFeedback]         = useState({ message: "", type: "" });
   const [loading, setLoading]           = useState(true);
 
-  // Adaugam stări noi pentru gestionarea imaginii în formular
+  // Stări pentru gestionarea imaginii în formular
   const [imageUrl, setImageUrl]         = useState("");
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError]     = useState("");
+
+  // Stări noi pentru funcționalitatea AI de generare citat
+  // `aiLoading` – true cât timp OpenAI procesează cererea
+  const [aiLoading, setAiLoading]       = useState(false);
+  // `aiGenerated` – true dacă citatul din formular a fost generat de AI
+  // (folosit pentru a afișa nota de avertizare)
+  const [aiGenerated, setAiGenerated]   = useState(false);
 
   // HOOK-ul de validare – destructurăm errors, validate, clearErrors
   const { errors, validate, clearErrors } =
     useFormValidation(VALIDATION_RULES);
 
   useEffect(() => { fetchQuotes(); }, []);
+
+  // Debounce de 3 secunde pe câmpul autor.
+  // La 3 secunde după ultima tastă, dacă autorul are cel puțin 3 caractere,
+  // declanșăm generarea automată a citatului cu OpenAI.
+  useEffect(() => {
+    // Nu generăm citatul dacă:
+    // – autorul are sub 3 caractere (evităm cereri pentru input parțial)
+    // – formularul este în modul editare (nu suprascriem citatele existente)
+    // – câmpul quote este deja completat manual de utilizator
+    if (
+      formData.author.trim().length < 3 ||
+      editingQuote ||
+      formData.quote.trim().length > 0
+    ) return;
+
+    // Setăm timer-ul de 3 secunde
+    const timer = setTimeout(async () => {
+      setAiLoading(true);
+      try {
+        const result = await generateQuote(formData.author);
+
+        // Populăm automat câmpul quote cu citatul generat de AI
+        setFormData(prev => ({ ...prev, quote: result.quote }));
+        setAiGenerated(true); // marcăm că citatul vine din AI
+      } catch (err) {
+        // Eroarea la AI nu blochează utilizatorul – afișăm doar în consolă
+        console.warn("Generare AI eșuată:", err.message);
+      } finally {
+        setAiLoading(false);
+      }
+    }, 3000); // ~3000ms = 3 secunde
+
+    // Cleanup: dacă utilizatorul continuă să tasteze, anulăm timer-ul anterior
+    return () => clearTimeout(timer);
+
+    // Dependențele: rulăm din nou efectul când autorul sau modul editare se schimbă
+  }, [formData.author, editingQuote]);
 
   async function fetchQuotes() {
     try {
@@ -55,11 +99,18 @@ export default function ManagePage() {
     }
   }
 
+  // Actualizăm handleChange – resetăm flag-ul aiGenerated la modificarea manuală a citatului
   function handleChange(e) {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+
+    // Dacă utilizatorul modifică manual câmpul quote după generarea AI,
+    // resetăm flag-ul – citatul nu mai este pur AI
+    if (e.target.name === "quote") {
+      setAiGenerated(false);
+    }
   }
 
-  // Adaugam handler pentru butonul „Caută imagine"
+  // Handler pentru butonul „Caută imagine"
   async function handleFetchImage() {
     if (!formData.author.trim()) {
       setImageError("Introduceți mai întâi numele autorului.");
@@ -80,7 +131,7 @@ export default function ManagePage() {
     }
   }
 
-  // Actualizăm handleSubmit – includem imageUrl în datele trimise
+  // handleSubmit – includem imageUrl în datele trimise
   async function handleSubmit(e) {
     e.preventDefault();
     if (!validate(formData)) return;
@@ -104,12 +155,13 @@ export default function ManagePage() {
     }
   }
 
-  // Actualizăm handleEdit pentru a popula și imageUrl
+  // handleEdit – populăm și imageUrl; resetăm flag-ul AI
   function handleEdit(quote) {
     setEditingQuote(quote);
     setFormData({ author: quote.author, quote: quote.quote });
     setImageUrl(quote.imageUrl || "");
     setImageError("");
+    setAiGenerated(false); // resetăm flag-ul AI la intrarea în editare
     clearErrors(); // ȘTERGEM erorile anterioare la intrarea în editare
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -125,12 +177,13 @@ export default function ManagePage() {
     }
   }
 
-  // Actualizăm resetForm
+  // resetForm – resetăm și flag-ul AI
   function resetForm() {
     setEditingQuote(null);
     setFormData({ author: "", quote: "" });
     setImageUrl("");
     setImageError("");
+    setAiGenerated(false); // resetăm flag-ul AI
     clearErrors(); // CURĂTĂM erorile la resetarea formularului
   }
 
@@ -273,31 +326,60 @@ export default function ManagePage() {
               )}
             </div>
 
-            {/* — Câmp citat — */}
+            {/* — Câmp citat – populat automat de AI sau manual — */}
             <div>
-              <label htmlFor="quote"
-                className="block text-sm font-medium text-gray-700 mb-1">
-                Citat
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="quote"
+                  className="block text-sm font-medium text-gray-700">
+                  Citat
+                </label>
+
+                {/* Indicator de stare AI – vizibil în timp ce OpenAI generează citat */}
+                {aiLoading && (
+                  <span className="text-xs text-indigo-500 flex items-center gap-1
+                                   animate-pulse">
+                    <span>✨</span> AI generează citat...
+                  </span>
+                )}
+
+                {/* Badge „Generat de AI" – apare după generare, dispare la editare manuală */}
+                {aiGenerated && !aiLoading && (
+                  <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5
+                                   rounded-full border border-indigo-200">
+                    ✨ Generat de AI
+                  </span>
+                )}
+              </div>
+
               <textarea
                 id="quote"
                 name="quote"
                 value={formData.quote}
                 onChange={handleChange}
-                placeholder="Introduceți citatul..."
+                placeholder={aiLoading
+                  ? "Se generează citatul..."
+                  : "Introduceți citatul sau așteptați generarea automată..."}
                 rows={4}
-                className={`${inputClass("quote")} resize-none`}
+                className={`${inputClass("quote")} resize-none transition-all
+                            ${aiLoading ? "bg-indigo-50 border-indigo-200" : ""}`}
               />
-              {/* CONTOR de caractere + mesaj de eroare */}
-              <div className="flex justify-between mt-1">
-                {errors.quote
-                  ? <p className="text-xs text-red-500 flex items-center gap-1">
+
+              <div className="flex justify-between mt-1 items-start">
+                <div className="flex flex-col gap-1">
+                  {errors.quote && (
+                    <p className="text-xs text-red-500 flex items-center gap-1">
                       <span>⚠</span> {errors.quote}
                     </p>
-                  : <span />
-                }
+                  )}
+                  {/* Notă adăugată – citatul AI poate fi editat sau înlocuit */}
+                  {aiGenerated && !aiLoading && (
+                    <p className="text-xs text-gray-400 italic">
+                      △ Citat sugerat de AI – verificați autenticitatea înainte de salvare.
+                    </p>
+                  )}
+                </div>
                 {/* Contorul devine roșu când se apropie de limita de 500 */}
-                <span className={`text-xs ml-auto
+                <span className={`text-xs ml-auto flex-shrink-0
                   ${formData.quote.length > 450 ? "text-red-400" : "text-gray-400"}`}>
                   {formData.quote.length}/500
                 </span>

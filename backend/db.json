@@ -53,6 +53,18 @@
       "author": "Sun Tzu",
       "quote": "\"The supreme art of war is to subdue the enemy without fighting.\"",
       "imageUrl": "/images/sun_tzu.jpg"
+    },
+    {
+      "id": "10",
+      "author": "Sun Tzu",
+      "quote": "Cunoașterea dușmanului și a sinelui este cheia victoriei; în tăcere, strategia se naște.",
+      "imageUrl": "/images/sun_tzu.jpg"
+    },
+    {
+      "id": "11",
+      "author": "Sun Tzu",
+      "quote": "Cei mai înțelepți lideri își cunosc dușmanii și pe ei înșiși; în fiecare confruntare, cunoașterea este cheia victoriei.",
+      "imageUrl": "/images/sun_tzu.jpg"
     }
   ],
   "$schema": "./node_modules/json-server/schema.json"
