@@ -1,21 +1,17 @@
 import { useState } from "react";
 import { fetchAuthorInfo } from "../api/quotesApi";
+import { CATEGORIES } from "../constants/categories";
 
 export default function QuoteCard({ quote, onEdit, onDelete }) {
-  // ───────────────────────────────────────────────
-  // Stări pentru tooltip AI
   const [tooltipInfo, setTooltipInfo] = useState("");
   const [tooltipLoading, setTooltipLoading] = useState(false);
   const [tooltipVisible, setTooltipVisible] = useState(false);
   const [tooltipError, setTooltipError] = useState("");
 
-  // ───────────────────────────────────────────────
-  // URL imagine autor (prefixat cu serverul Express)
   const imgSrc = quote.imageUrl
     ? `http://localhost:5000${quote.imageUrl}`
     : null;
 
-  // Inițiale pentru placeholder (ex. "Albert Einstein" → "AE")
   const initials = quote.author
     .split(" ")
     .map((w) => w[0])
@@ -23,25 +19,24 @@ export default function QuoteCard({ quote, onEdit, onDelete }) {
     .toUpperCase()
     .slice(0, 2);
 
-  // ───────────────────────────────────────────────
-  // Hover pe numele autorului → cerem info AI
+  // găsim obiectul categoriei pentru a afișa emoji și culoare
+  const categoryObj = CATEGORIES.find(c => c.id === quote.category);
+
   async function handleAuthorHover() {
     setTooltipVisible(true);
-    if (tooltipInfo || tooltipError) return; // cache simplu
+    if (tooltipInfo || tooltipError) return;
 
     setTooltipLoading(true);
     try {
       const data = await fetchAuthorInfo(quote.author);
       setTooltipInfo(data.info);
-    } catch (err) {
+    } catch {
       setTooltipError("Informații indisponibile momentan.");
     } finally {
       setTooltipLoading(false);
     }
   }
 
-  // ───────────────────────────────────────────────
-  // Render JSX
   return (
     <div
       className="flex flex-col justify-between bg-white rounded-2xl shadow-md
@@ -50,7 +45,6 @@ export default function QuoteCard({ quote, onEdit, onDelete }) {
     >
       {/* — Header: imagine + autor cu tooltip — */}
       <div className="flex items-center gap-3 mb-4">
-        {/* Fotografie autor */}
         {imgSrc ? (
           <img
             src={imgSrc}
@@ -64,7 +58,6 @@ export default function QuoteCard({ quote, onEdit, onDelete }) {
           />
         ) : null}
 
-        {/* Placeholder cu inițiale */}
         <div
           className="w-12 h-12 rounded-full bg-indigo-100 flex items-center
                      justify-center text-indigo-600 font-bold text-sm flex-shrink-0"
@@ -73,7 +66,6 @@ export default function QuoteCard({ quote, onEdit, onDelete }) {
           {initials}
         </div>
 
-        {/* Numele autorului + tooltip AI */}
         <div
           className="relative"
           onMouseEnter={handleAuthorHover}
@@ -87,7 +79,6 @@ export default function QuoteCard({ quote, onEdit, onDelete }) {
             {quote.author}
           </p>
 
-          {/* Tooltip — apare la hover */}
           {tooltipVisible && (
             <div
               className="absolute bottom-full left-0 mb-2 w-64 z-50
@@ -99,9 +90,7 @@ export default function QuoteCard({ quote, onEdit, onDelete }) {
                     className="w-3 h-3 border-2 border-white border-t-transparent
                                rounded-full animate-spin flex-shrink-0"
                   />
-                  <span className="text-gray-300">
-                    Se încarcă informații...
-                  </span>
+                  <span className="text-gray-300">Se încarcă informații...</span>
                 </div>
               ) : tooltipError ? (
                 <p className="text-red-300">{tooltipError}</p>
@@ -120,15 +109,23 @@ export default function QuoteCard({ quote, onEdit, onDelete }) {
 
       {/* — Textul citatului — */}
       <div className="flex-1">
-        <span className="text-4xl text-indigo-300 leading-none select-none">
-          "
-        </span>
+        <span className="text-4xl text-indigo-300 leading-none select-none">"</span>
         <p className="text-gray-600 text-sm italic leading-relaxed mt-1">
           {quote.quote}
         </p>
       </div>
 
-      {/* — Butoane acțiuni — doar în ManagePage — */}
+      {/* — Badge categorie — */}
+      {categoryObj && (
+        <div className="mt-3">
+          <span className={`inline-flex items-center gap-1 text-xs font-medium
+            px-2 py-0.5 rounded-full border ${categoryObj.color}`}>
+            {categoryObj.emoji} {categoryObj.label}
+          </span>
+        </div>
+      )}
+
+      {/* — Butoane acțiuni — */}
       {(onEdit || onDelete) && (
         <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
           {onEdit && (

@@ -18,7 +18,6 @@ const openai = new OpenAI({
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Directorul unde salvăm imaginile descărcate.
 const IMAGES_DIR = path.join(__dirname, "images");
 
 if (!fs.existsSync(IMAGES_DIR)) {
@@ -38,35 +37,44 @@ const validateId = (req, res, next) => {
 };
 
 const quoteSchema = Joi.object({
-  author:   Joi.string().min(2).required(),
-  quote:    Joi.string().min(5).required(),
+  author:   Joi.string().trim().min(2).required(),
+  quote:    Joi.string().trim().min(5).required(),
   imageUrl: Joi.string().allow("").optional(),
+  // categoria trebuie să fie una din valorile predefinite sau absentă
+  category: Joi.string()
+    .valid("intelepciune", "motivatie", "umor", "filosofie", "stiinta")
+    .allow("")
+    .optional(),
 });
 
 app.get("/", (req, res) => {
   res.send("printing quotes API is running---");
 });
 
-// Extragem citatele
+// GET /api/quotes?search=termen&category=motivatie
+// Suportă filtrare simultană după search și category.
 app.get("/api/quotes", async (req, res) => {
   try {
     const response = await fetch(JSON_SERVER_URL);
     const data     = await response.json();
 
-    const { search } = req.query;
+    const { search, category } = req.query;
+
+    let result = data;
 
     if (search && search.trim()) {
       const term = search.trim().toLowerCase();
-
-      const filtered = data.filter(q =>
+      result = result.filter(q =>
         q.author.toLowerCase().includes(term) ||
         q.quote.toLowerCase().includes(term)
       );
-
-      return res.status(200).json(filtered);
     }
 
-    res.status(200).json(data);
+    if (category && category !== "all") {
+      result = result.filter(q => q.category === category);
+    }
+
+    res.status(200).json(result);
   } catch (error) {
     console.error("Eroare la preluarea citatelor:", error.message);
     res.status(500).json({ error: "Nu s-au putut prelua citatele." });
@@ -167,22 +175,15 @@ Dacă nu, generează unul în stilul și filosofia sa.`,
 
   } catch (error) {
     console.error("Eroare OpenAI:", error.message);
-
     if (error.status === 401) {
       return res.status(500).json({ error: "Cheie API OpenAI invalidă." });
     }
-
     res.status(500).json({ error: "Nu s-a putut genera citatul." });
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/quotes/author-info
-// Primește { author } și returnează o descriere scurtă despre
-// autor, generată de AI. Răspunsul este deliberat scurt (2
-// propoziții) pentru a se încadra vizual într-un tooltip.
-//
-// Il vom defini înainte de /api/quotes/:id
 // ─────────────────────────────────────────────────────────────────────────────
 app.post("/api/quotes/author-info", async (req, res) => {
   const { author } = req.body;
@@ -196,7 +197,6 @@ app.post("/api/quotes/author-info", async (req, res) => {
       model: "gpt-4o-mini",
       messages: [
         {
-          // Sistemul definește formatul răspunsului
           role: "system",
           content: `Ești un asistent concis care descrie personalități istorice.
                     Răspunzi doar în limba română.
@@ -209,9 +209,7 @@ app.post("/api/quotes/author-info", async (req, res) => {
           content: `Descrie pe ${author.trim()} în exact 2 propoziții.`,
         },
       ],
-      // 120 tokens sunt suficienți pentru două propoziții scurte
       max_tokens: 120,
-      // răspuns mai concis și factual
       temperature: 0.5,
     });
 

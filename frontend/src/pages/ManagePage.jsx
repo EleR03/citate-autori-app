@@ -2,11 +2,10 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import QuoteCard from "../components/QuoteCard";
 import { getAllQuotes, addQuote, updateQuote, deleteQuote,
-         fetchAuthorImage, generateQuote} from "../api/quotesApi"; // IMPORT generateQuote
-import { useFormValidation } from "../hooks/useFormValidation"; // IMPORT hook validare
+         fetchAuthorImage, generateQuote} from "../api/quotesApi";
+import { useFormValidation } from "../hooks/useFormValidation";
+import { CATEGORIES } from "../constants/categories";
 
-// Regulile de validare sunt definite o singură dată, în afara componentei.
-// Astfel nu se recreează la fiecare render.
 const VALIDATION_RULES = {
   author: {
     required:       true,
@@ -33,59 +32,41 @@ export default function ManagePage() {
   const [feedback, setFeedback]         = useState({ message: "", type: "" });
   const [loading, setLoading]           = useState(true);
 
-  // Stări pentru gestionarea imaginii în formular
   const [imageUrl, setImageUrl]         = useState("");
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError]     = useState("");
 
-  // Stări noi pentru funcționalitatea AI de generare citat
-  // `aiLoading` – true cât timp OpenAI procesează cererea
   const [aiLoading, setAiLoading]       = useState(false);
-  // `aiGenerated` – true dacă citatul din formular a fost generat de AI
-  // (folosit pentru a afișa nota de avertizare)
   const [aiGenerated, setAiGenerated]   = useState(false);
 
-  // HOOK-ul de validare – destructurăm errors, validate, clearErrors
-  const { errors, validate, clearErrors } =
-    useFormValidation(VALIDATION_RULES);
+  // categoria selectată în formular
+  const [category, setCategory]         = useState("");
+
+  const { errors, validate, clearErrors } = useFormValidation(VALIDATION_RULES);
 
   useEffect(() => { fetchQuotes(); }, []);
 
-  // Debounce de 3 secunde pe câmpul autor.
-  // La 3 secunde după ultima tastă, dacă autorul are cel puțin 3 caractere,
-  // declanșăm generarea automată a citatului cu OpenAI.
   useEffect(() => {
-    // Nu generăm citatul dacă:
-    // – autorul are sub 3 caractere (evităm cereri pentru input parțial)
-    // – formularul este în modul editare (nu suprascriem citatele existente)
-    // – câmpul quote este deja completat manual de utilizator
     if (
       formData.author.trim().length < 3 ||
       editingQuote ||
       formData.quote.trim().length > 0
     ) return;
 
-    // Setăm timer-ul de 3 secunde
     const timer = setTimeout(async () => {
       setAiLoading(true);
       try {
         const result = await generateQuote(formData.author);
-
-        // Populăm automat câmpul quote cu citatul generat de AI
         setFormData(prev => ({ ...prev, quote: result.quote }));
-        setAiGenerated(true); // marcăm că citatul vine din AI
+        setAiGenerated(true);
       } catch (err) {
-        // Eroarea la AI nu blochează utilizatorul – afișăm doar în consolă
         console.warn("Generare AI eșuată:", err.message);
       } finally {
         setAiLoading(false);
       }
-    }, 3000); // ~3000ms = 3 secunde
+    }, 3000);
 
-    // Cleanup: dacă utilizatorul continuă să tasteze, anulăm timer-ul anterior
     return () => clearTimeout(timer);
-
-    // Dependențele: rulăm din nou efectul când autorul sau modul editare se schimbă
   }, [formData.author, editingQuote]);
 
   async function fetchQuotes() {
@@ -99,27 +80,20 @@ export default function ManagePage() {
     }
   }
 
-  // Actualizăm handleChange – resetăm flag-ul aiGenerated la modificarea manuală a citatului
   function handleChange(e) {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-
-    // Dacă utilizatorul modifică manual câmpul quote după generarea AI,
-    // resetăm flag-ul – citatul nu mai este pur AI
     if (e.target.name === "quote") {
       setAiGenerated(false);
     }
   }
 
-  // Handler pentru butonul „Caută imagine"
   async function handleFetchImage() {
     if (!formData.author.trim()) {
       setImageError("Introduceți mai întâi numele autorului.");
       return;
     }
-
     setImageLoading(true);
     setImageError("");
-
     try {
       const result = await fetchAuthorImage(formData.author);
       setImageUrl(result.imageUrl);
@@ -131,13 +105,12 @@ export default function ManagePage() {
     }
   }
 
-  // handleSubmit – includem imageUrl în datele trimise
   async function handleSubmit(e) {
     e.preventDefault();
     if (!validate(formData)) return;
 
-    // Includem imageUrl în datele trimise la backend
-    const payload = { ...formData, imageUrl };
+    // includem category în payload
+    const payload = { ...formData, imageUrl, category };
 
     try {
       if (editingQuote) {
@@ -150,19 +123,18 @@ export default function ManagePage() {
       resetForm();
       fetchQuotes();
     } catch (err) {
-      // Erorile de la backend (ex. validare joi care a scăpat) ajung aici
       showFeedback(err.message, "error");
     }
   }
 
-  // handleEdit – populăm și imageUrl; resetăm flag-ul AI
   function handleEdit(quote) {
     setEditingQuote(quote);
     setFormData({ author: quote.author, quote: quote.quote });
     setImageUrl(quote.imageUrl || "");
+    setCategory(quote.category || ""); // populăm și categoria
     setImageError("");
-    setAiGenerated(false); // resetăm flag-ul AI la intrarea în editare
-    clearErrors(); // ȘTERGEM erorile anterioare la intrarea în editare
+    setAiGenerated(false);
+    clearErrors();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -177,14 +149,14 @@ export default function ManagePage() {
     }
   }
 
-  // resetForm – resetăm și flag-ul AI
   function resetForm() {
     setEditingQuote(null);
     setFormData({ author: "", quote: "" });
     setImageUrl("");
     setImageError("");
-    setAiGenerated(false); // resetăm flag-ul AI
-    clearErrors(); // CURĂTĂM erorile la resetarea formularului
+    setCategory(""); // resetăm și categoria
+    setAiGenerated(false);
+    clearErrors();
   }
 
   function showFeedback(message, type) {
@@ -192,12 +164,9 @@ export default function ManagePage() {
     setTimeout(() => setFeedback({ message: "", type: "" }), 3000);
   }
 
-  // Clasă de bază pentru input – reutilizată pentru toate câmpurile
   const inputBase = `w-full px-4 py-2 border rounded-lg text-sm
                      focus:outline-none focus:ring-2 transition`;
 
-  // FUNCȚIE care returnează clasa corectă în funcție de starea câmpului
-  // Câmpurile cu eroare primesc border roșu, cele normale border gri
   const inputClass = (field) =>
     `${inputBase} ${
       errors[field]
@@ -238,15 +207,13 @@ export default function ManagePage() {
           </div>
         )}
 
-        {/* — Formular cu validare — */}
+        {/* — Formular — */}
         <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className={`text-lg font-semibold mb-6
                           ${editingQuote ? "text-amber-600" : "text-indigo-600"}`}>
             {editingQuote ? "✎ Editează citatul" : "+ Adaugă citat nou"}
           </h2>
 
-          {/* noValidate dezactivează validarea nativă a browserului
-              – o gestionăm noi manual pentru mai mult control */}
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>
 
             {/* — Câmp autor — */}
@@ -264,7 +231,6 @@ export default function ManagePage() {
                 placeholder="ex. Marcus Aurelius"
                 className={inputClass("author")}
               />
-              {/* MESAJUL de eroare apare doar dacă există eroare pentru câmpul autor */}
               {errors.author && (
                 <p className="mt-1 text-xs text-red-500 flex items-center gap-1">
                   <span>⚠</span> {errors.author}
@@ -277,11 +243,9 @@ export default function ManagePage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Imagine autor
               </label>
-
               <div className="flex gap-2">
-                {/* Butonul caută imaginea pe Wikipedia prin Express */}
                 <button
-                  type="button"      // ← nu trimite formularul
+                  type="button"
                   onClick={handleFetchImage}
                   disabled={imageLoading || !formData.author.trim()}
                   className="flex-1 py-2 px-4 text-sm font-medium rounded-lg border
@@ -291,8 +255,6 @@ export default function ManagePage() {
                 >
                   {imageLoading ? "⏳ Se caută..." : "🔍 Caută imagine pe Wikipedia"}
                 </button>
-
-                {/* Dacă există imagine, afișăm buton de ștergere */}
                 {imageUrl && (
                   <button
                     type="button"
@@ -304,13 +266,9 @@ export default function ManagePage() {
                   </button>
                 )}
               </div>
-
-              {/* Mesaj de eroare dacă Wikipedia nu găsește autorul */}
               {imageError && (
                 <p className="mt-1 text-xs text-red-500">⚠ {imageError}</p>
               )}
-
-              {/* Previzualizare imagine – apare după ce s-a găsit cu succes */}
               {imageUrl && !imageError && (
                 <div className="mt-3 flex items-center gap-3 p-3 bg-gray-50
                                 rounded-lg border border-gray-100">
@@ -318,7 +276,6 @@ export default function ManagePage() {
                     src={`http://localhost:5000${imageUrl}`}
                     alt={formData.author}
                     className="w-16 h-16 rounded-full object-cover border-2 border-indigo-200"
-                    // Fallback dacă imaginea nu se încarcă
                     onError={(e) => { e.target.style.display = "none"; }}
                   />
                   <p className="text-xs text-gray-500 break-all">{imageUrl}</p>
@@ -326,23 +283,18 @@ export default function ManagePage() {
               )}
             </div>
 
-            {/* — Câmp citat – populat automat de AI sau manual — */}
+            {/* — Câmp citat — */}
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label htmlFor="quote"
                   className="block text-sm font-medium text-gray-700">
                   Citat
                 </label>
-
-                {/* Indicator de stare AI – vizibil în timp ce OpenAI generează citat */}
                 {aiLoading && (
-                  <span className="text-xs text-indigo-500 flex items-center gap-1
-                                   animate-pulse">
+                  <span className="text-xs text-indigo-500 flex items-center gap-1 animate-pulse">
                     <span>✨</span> AI generează citat...
                   </span>
                 )}
-
-                {/* Badge „Generat de AI" – apare după generare, dispare la editare manuală */}
                 {aiGenerated && !aiLoading && (
                   <span className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5
                                    rounded-full border border-indigo-200">
@@ -350,7 +302,6 @@ export default function ManagePage() {
                   </span>
                 )}
               </div>
-
               <textarea
                 id="quote"
                 name="quote"
@@ -363,7 +314,6 @@ export default function ManagePage() {
                 className={`${inputClass("quote")} resize-none transition-all
                             ${aiLoading ? "bg-indigo-50 border-indigo-200" : ""}`}
               />
-
               <div className="flex justify-between mt-1 items-start">
                 <div className="flex flex-col gap-1">
                   {errors.quote && (
@@ -371,19 +321,41 @@ export default function ManagePage() {
                       <span>⚠</span> {errors.quote}
                     </p>
                   )}
-                  {/* Notă adăugată – citatul AI poate fi editat sau înlocuit */}
                   {aiGenerated && !aiLoading && (
                     <p className="text-xs text-gray-400 italic">
                       △ Citat sugerat de AI – verificați autenticitatea înainte de salvare.
                     </p>
                   )}
                 </div>
-                {/* Contorul devine roșu când se apropie de limita de 500 */}
                 <span className={`text-xs ml-auto flex-shrink-0
                   ${formData.quote.length > 450 ? "text-red-400" : "text-gray-400"}`}>
                   {formData.quote.length}/500
                 </span>
               </div>
+            </div>
+
+            {/* — Dropdown categorie — */}
+            <div>
+              <label htmlFor="category"
+                className="block text-sm font-medium text-gray-700 mb-1">
+                Categorie
+                <span className="ml-1 text-gray-400 font-normal">(opțional)</span>
+              </label>
+              <select
+                id="category"
+                value={category}
+                onChange={e => setCategory(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm
+                           bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300
+                           text-gray-700 transition"
+              >
+                <option value="">— Fără categorie —</option>
+                {CATEGORIES.map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.emoji} {cat.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             {/* — Butoane — */}
@@ -398,14 +370,12 @@ export default function ManagePage() {
               >
                 {editingQuote ? "💾 Salvează modificările" : "+ Adaugă citat"}
               </button>
-
               {editingQuote && (
                 <button
                   type="button"
                   onClick={resetForm}
                   className="flex-1 py-2.5 text-sm font-semibold text-gray-600
-                             bg-gray-100 rounded-lg hover:bg-gray-200
-                             transition-colors"
+                             bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                 >
                   × Anulează
                 </button>
@@ -422,7 +392,6 @@ export default function ManagePage() {
               ({quotes.length})
             </span>
           </h2>
-
           {loading ? (
             <p className="text-center text-indigo-500 animate-pulse py-10">
               Se încarcă...

@@ -1,71 +1,75 @@
 {
+  "$schema": "./node_modules/json-server/schema.json",
   "quotes": [
     {
       "id": "1",
       "author": "Socrates",
       "quote": "The only true wisdom is in knowing you know nothing.",
-      "imageUrl": "/images/socrates.jpg"
+      "imageUrl": "/images/socrates.jpg",
+      "category": "intelepciune"
     },
     {
       "id": "2",
-      "author": "Einstein",
+      "author": "Albert Einstein",
       "quote": "Imagination is more important than knowledge.",
-      "imageUrl": "/images/einstein.jpg"
+      "imageUrl": "/images/einstein.jpg",
+      "category": "stiinta"
     },
     {
       "id": "3",
       "author": "Marcus Aurelius",
       "quote": "You have power over your mind, not outside events. Realize this and you will find strength.",
-      "imageUrl": "/images/marcus_aurelius.jpg"
+      "imageUrl": "/images/marcus_aurelius.jpg",
+      "category": "filosofie"
     },
     {
       "id": "4",
       "author": "Winston Churchill",
       "quote": "Success is not final, failure is not fatal: it is the courage to continue that counts.",
-      "imageUrl": "/images/winston_churchill.jpg"
+      "imageUrl": "/images/winston_churchill.jpg",
+      "category": "motivatie"
     },
     {
       "id": "5",
-      "author": "Albert Einstein",
-      "quote": "Imagination is more important than knowledge.",
-      "imageUrl": "/images/albert_einstein.jpg"
+      "author": "Maya Angelou",
+      "quote": "You will face many defeats in life, but never let yourself be defeated.",
+      "imageUrl": "/images/maya_angelou.jpg",
+      "category": "motivatie"
     },
     {
       "id": "6",
-      "author": "Maya Angelou",
-      "quote": "You will face many defeats in life, but never let yourself be defeated.",
-      "imageUrl": "/images/maya_angelou.jpg"
+      "author": "Nelson Mandela",
+      "quote": "It always seems impossible until it is done.",
+      "imageUrl": "/images/nelson_mandela.jpg",
+      "category": "motivatie"
     },
     {
       "id": "7",
-      "author": "Nelson Mandela",
-      "quote": "It always seems impossible until it is done.",
-      "imageUrl": "/images/nelson_mandela.jpg"
+      "author": "Lao Tzu",
+      "quote": "The journey of a thousand miles begins with a single step.",
+      "imageUrl": "/images/lao_tzu.png",
+      "category": "filosofie"
     },
     {
       "id": "8",
-      "author": "Lao Tzu",
-      "quote": "“The journey of a thousand miles begins with a single step.”",
-      "imageUrl": "/images/lao_tzu.png"
+      "author": "Sun Tzu",
+      "quote": "The supreme art of war is to subdue the enemy without fighting.",
+      "imageUrl": "/images/sun_tzu.jpg",
+      "category": "filosofie"
     },
     {
       "id": "9",
       "author": "Sun Tzu",
-      "quote": "\"The supreme art of war is to subdue the enemy without fighting.\"",
-      "imageUrl": "/images/sun_tzu.jpg"
+      "quote": "Cunoașterea dușmanului și a sinelui este cheia victoriei; în tăcere, strategia se naște.",
+      "imageUrl": "/images/sun_tzu.jpg",
+      "category": "filosofie"
     },
     {
       "id": "10",
       "author": "Sun Tzu",
-      "quote": "Cunoașterea dușmanului și a sinelui este cheia victoriei; în tăcere, strategia se naște.",
-      "imageUrl": "/images/sun_tzu.jpg"
-    },
-    {
-      "id": "11",
-      "author": "Sun Tzu",
       "quote": "Cei mai înțelepți lideri își cunosc dușmanii și pe ei înșiși; în fiecare confruntare, cunoașterea este cheia victoriei.",
-      "imageUrl": "/images/sun_tzu.jpg"
+      "imageUrl": "/images/sun_tzu.jpg",
+      "category": "filosofie"
     }
-  ],
-  "$schema": "./node_modules/json-server/schema.json"
+  ]
 }

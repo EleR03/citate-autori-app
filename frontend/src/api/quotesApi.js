@@ -1,11 +1,18 @@
 // URL-ul de bază al backend-ului Express.
 const BASE_URL = "http://localhost:5000/api/quotes";
 
-// GET /api/quotes
-export async function getAllQuotes(search = "") {
-  const url = search.trim()
-    ? `${BASE_URL}?search=${encodeURIComponent(search.trim())}`
-    : BASE_URL;
+// GET /api/quotes?search=termen&category=motivatie
+// Ambii parametri sunt opționali și pot fi combinați.
+export async function getAllQuotes(search = "", category = "") {
+  // Construim query string-ul dinamic
+  const params = new URLSearchParams();
+
+  if (search.trim())                  params.append("search", search.trim());
+  if (category && category !== "all") params.append("category", category);
+
+  // URLSearchParams.toString() generează "search=x&category=y"
+  const queryString = params.toString();
+  const url = queryString ? `${BASE_URL}?${queryString}` : BASE_URL;
 
   const response = await fetch(url);
   if (!response.ok) throw new Error("Nu s-au putut prelua citatele.");
@@ -36,7 +43,6 @@ export async function fetchAuthorImage(author) {
       body: JSON.stringify({ author }),
     }
   );
-
   if (!response.ok) {
     const err = await response.json();
     throw new Error(err.error || "Nu s-a putut prelua imaginea.");
@@ -44,11 +50,9 @@ export async function fetchAuthorImage(author) {
   return response.json();
 }
 
-// ─────────────────────────────────────────────────────────────
-// POST /api/quotes/author-info  ← CODUL DIN IMAGINE INTEGRAT
+// POST /api/quotes/author-info
 // Returnează o descriere scurtă despre autor generată de AI.
 // Apelată din QuoteCard la hover pe numele autorului.
-// ─────────────────────────────────────────────────────────────
 export async function fetchAuthorInfo(author) {
   const response = await fetch(
     `${BASE_URL.replace("/quotes", "")}/quotes/author-info`,
@@ -58,11 +62,9 @@ export async function fetchAuthorInfo(author) {
       body: JSON.stringify({ author }),
     }
   );
-
   if (!response.ok) {
     throw new Error("Nu s-au putut prelua informațiile despre autor.");
   }
-
   return response.json(); // { text: "..." }
 }
 
@@ -76,12 +78,10 @@ export async function generateQuote(author) {
       body: JSON.stringify({ author }),
     }
   );
-
   if (!response.ok) {
     const err = await response.json();
     throw new Error(err.error || "Nu s-a putut genera citatul.");
   }
-
   return response.json(); // { quote: "..." }
 }
 
